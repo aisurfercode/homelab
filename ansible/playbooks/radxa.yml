@@ -1,0 +1,7 @@
+---
+- name: Configure Radxa Q6A
+  hosts: radxa
+  become: true
+
+  roles:
+    - ollama

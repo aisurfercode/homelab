@@ -1,0 +1,8 @@
+---
+- name: Install Pi Agent
+  hosts: pi
+  become: true
+
+  roles:
+    - pi-agent
+    - pi-agent-handshake

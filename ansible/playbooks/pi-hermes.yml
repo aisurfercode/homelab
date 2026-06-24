@@ -1,0 +1,12 @@
+---
+- name: Configure Raspberry Pi 5
+  hosts: pi
+  become: true
+
+  roles:
+    - role: hermes
+      tags: 
+        - hermes
+    - role: handshake
+      tags:
+        - handshake

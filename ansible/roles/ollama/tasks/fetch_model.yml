@@ -1,0 +1,35 @@
+
+# -----------------------------
+# Ensure Ollama service exists
+# -----------------------------
+- name: Check Ollama CLI exists
+  shell: which ollama
+  register: ollama_check
+  changed_when: false
+
+- name: Fail if Ollama not installed
+  fail:
+    msg: "Ollama is not installed on Radxa"
+  when: ollama_check.rc != 0
+
+# -----------------------------
+# Pull models (idempotent)
+# -----------------------------
+- name: Pull required Ollama models
+  shell: |
+    ollama pull {{ item }}
+  loop: "{{ ollama_models }}"
+  register: pull_output
+  changed_when: "'pulling' in pull_output.stdout or 'downloading' in pull_output.stdout"
+
+# -----------------------------
+# Verify models installed
+# -----------------------------
+- name: List Ollama models
+  shell: ollama list
+  register: model_list
+  changed_when: false
+
+- name: Show models
+  debug:
+    var: model_list.stdout

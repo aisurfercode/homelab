@@ -1,0 +1,18 @@
+ollama_host: 172.42.42.1
+
+ollama_port: 11434
+
+hermes_install_script: "https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh"
+
+hermes_model_provider: "ollama"
+
+hermes_auto_start: true
+
+hermes_user: homelab
+hermes_home: "/home/homelab/.hermes"
+
+ollama_models:
+  - ibm/granite4:tiny-h  
+
+hermes_model_name: ibm/granite4:tiny-h
+hermes_context_length: 65536

@@ -1,0 +1,89 @@
+---
+# =============================
+# Hermes ↔ Ollama Handshake (correct definition)
+# =============================
+- name: Find Hermes binary
+  become_user: "{{ hermes_user }}"
+  shell: |
+    find /home/{{ hermes_user }} -type f -name hermes -executable | head -n 1
+  register: hermes_bin
+  changed_when: false
+
+# -------------------------------------------------
+# 1. Probe current model configuration (Hermes)
+# -------------------------------------------------
+- name: Read Hermes config
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} config show"
+  register: hermes_config
+  changed_when: false
+
+- name: Show Hermes config (debug)
+  debug:
+    var: hermes_config.stdout_lines
+
+
+# -------------------------------------------------
+# 2. Ensure model + provider configuration is correct
+# -------------------------------------------------
+
+- name: Ensure Hermes provider is set
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} config set model.provider {{ hermes_model_provider }}"
+  changed_when: true
+
+- name: Ensure Hermes base URL is set
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} config set model.base_url http://{{ ollama_host }}:{{ ollama_port }}/v1"
+  changed_when: true
+
+- name: Ensure Hermes model is set
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} config set model.default {{ hermes_model_name }}"
+  changed_when: true
+
+- name: Ensure Hermes context length is set
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} config set model.context_length {{ hermes_context_length }}"
+  changed_when: true
+
+
+# -------------------------------------------------
+# 3. Ensure model exists in Ollama registry
+# -------------------------------------------------
+
+- name: Get installed Ollama models
+  uri:
+    url: "http://{{ ollama_host }}:{{ ollama_port }}/api/tags"
+    method: GET
+    return_content: true
+  register: ollama_models
+
+- name: Extract model list
+  set_fact:
+    ollama_model_names: "{{ ollama_models.json.models | default([]) }}"
+
+- name: Debug available models
+  debug:
+    var: ollama_model_names
+
+# NOTE:
+# (Optional future improvement: auto-pull model if missing)
+
+
+# -------------------------------------------------
+# 4. Final deterministic smoke test (Hermes)
+# -------------------------------------------------
+
+- name: Run Hermes deterministic test
+  become_user: "{{ hermes_user }}"
+  command: "{{ hermes_bin.stdout }} chat -q 'Hi'"
+  register: hermes_test
+  changed_when: false
+  ignore_errors: false
+
+- name: Show Hermes output
+  debug:
+    msg:
+      - "Hermes Output:"
+      - "{{ hermes_test.stdout }}"

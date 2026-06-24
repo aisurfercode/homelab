@@ -1,0 +1,17 @@
+---
+- name: Test vars
+  hosts: all
+
+  tasks:
+
+    - name: Show connection type
+      debug:
+        var: ansible_connection
+
+    - name: Show Ollama Host
+      debug:
+        var: ollama_host
+
+    - name: Show Ollama Port
+      debug:
+        var: ollama_port

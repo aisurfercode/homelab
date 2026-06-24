@@ -1,0 +1,152 @@
+---
+- name: Create Pi configuration directory
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.file:
+    path: "/home/{{ hermes_user }}/.pi/agent"
+    state: directory
+    mode: "0755"
+
+- name: Configure Pi to use Ollama
+  become: true
+  ansible.builtin.copy:
+    dest: "/home/{{ hermes_user }}/.pi/agent/models.json"
+    owner: "{{ hermes_user }}"
+    group: "{{ hermes_user }}"
+    mode: "0644"
+    content: |
+      {
+        "providers": {
+          "ollama": {
+            "baseUrl": "http://{{ ollama_host }}:{{ ollama_port }}/v1",
+            "api": "openai-completions",
+            "apiKey": "ollama",
+            "compat": {
+              "supportsDeveloperRole": false,
+              "supportsReasoningEffort": false
+            },
+            "models": [
+              {
+                "id": "{{ hermes_model_name }}",
+                "contextWindow": {{ hermes_context_length }},
+                "reasoning": true
+              }
+            ]
+          }
+        }
+      }
+
+- name: Ensure Pi permission system config directory exists
+  file:
+    path: "/home/{{ hermes_user }}/.pi/agent/extensions/pi-permission-system"
+    state: directory
+    owner: "{{ hermes_user }}"
+    group: "{{ hermes_user }}"
+    mode: '0755'
+
+- name: Configure Pi Coding Agent sudo permissions
+  copy:
+    dest: "/home/{{ hermes_user }}/.pi/agent/extensions/pi-permission-system/config.json"
+    owner: "{{ hermes_user }}"
+    group: "{{ hermes_user }}"
+    mode: '0644'
+    content: |
+      {
+        "permission": {
+          "bash": {
+            "sudo *": "allow",
+            "*": "ask"
+          }
+        }
+      }
+
+- name: Verify Ollama is reachable
+  ansible.builtin.uri:
+    url: "http://{{ ollama_host }}:{{ ollama_port }}/api/tags"
+    method: GET
+    return_content: true
+  register: ollama_response
+
+- name: Ensure configured model exists
+  ansible.builtin.assert:
+    that:
+      - hermes_model_name in (ollama_response.json.models | map(attribute='name') | list)
+    fail_msg: >
+      Model {{ hermes_model_name }} is not available in Ollama.
+      Available models:
+      {{ ollama_response.json.models | map(attribute='name') | list }}
+
+- name: Show available models
+  ansible.builtin.debug:
+    msg: "{{ ollama_response.json.models | map(attribute='name') | list }}"
+- name: Run Pi smoke test
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.shell: |
+    /home/{{ hermes_user }}/.npm-global/bin/pi \
+      --print \
+      "Reply with exactly: PI_AGENT_OK"
+  args:
+    executable: /bin/bash
+  register: pi_smoke_test
+  changed_when: false
+
+- name: Show Pi response
+  ansible.builtin.debug:
+    var: pi_smoke_test.stdout
+
+- name: Assert Pi is working
+  ansible.builtin.assert:
+    that:
+      - "'PI_AGENT_OK' in pi_smoke_test.stdout"
+    fail_msg: >
+      Pi failed the smoke test.
+      Response was:
+      {{ pi_smoke_test.stdout }}
+
+- name: Run Ollama performance probe
+  ansible.builtin.uri:
+    url: "http://{{ ollama_host }}:{{ ollama_port }}/api/generate"
+    method: POST
+    body_format: json
+    return_content: true
+    body:
+      model: "{{ hermes_model_name }}"
+      prompt: "Reply with exactly OK"
+      stream: false
+  register: ollama_probe
+
+- name: Calculate inference metrics
+  ansible.builtin.set_fact:
+    prompt_tokens: "{{ ollama_probe.json.prompt_eval_count | default(0) }}"
+    generated_tokens: "{{ ollama_probe.json.eval_count | default(0) }}"
+
+    prefill_tps: >-
+      {{
+        (
+          (ollama_probe.json.prompt_eval_count | float)
+          /
+          ((ollama_probe.json.prompt_eval_duration | float) / 1000000000)
+        ) | round(2)
+      }}
+
+    decode_tps: >-
+      {{
+        (
+          (ollama_probe.json.eval_count | float)
+          /
+          ((ollama_probe.json.eval_duration | float) / 1000000000)
+        ) | round(2)
+      }}
+
+- name: Display Pi handshake results
+  ansible.builtin.debug:
+    msg:
+      - "Pi handshake successful"
+      - "Model: {{ hermes_model_name }}"
+      - "Prompt tokens: {{ prompt_tokens }}"
+      - "Generated tokens: {{ generated_tokens }}"
+      - "Prefill speed: {{ prefill_tps }} tok/s"
+      - "Decode speed: {{ decode_tps }} tok/s"
+      - "Load duration: {{ (ollama_probe.json.load_duration / 1000000) | round(0) }} ms"
+      - "Total duration: {{ (ollama_probe.json.total_duration / 1000000) | round(0) }} ms"

@@ -1,0 +1,140 @@
+---
+- name: Install Ollama using official installer
+  shell: |
+    curl -fsSL https://ollama.com/install.sh | stdbuf -oL sh
+  args:
+    creates: /usr/local/bin/ollama
+
+- name: Create Ollama environment override directory
+  file:
+    path: /etc/systemd/system/ollama.service.d
+    state: directory
+    mode: "0755"
+
+- name: Configure Ollama listen address
+  copy:
+    dest: /etc/systemd/system/ollama.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Service]
+      Environment="OLLAMA_HOST={{ ollama_host }}:{{ ollama_port }}"
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+
+- name: Restart Ollama
+  systemd:
+    name: ollama
+    state: restarted
+    enabled: true
+
+- name: Verify Ollama API is reachable
+  uri:
+    url: http://{{ ollama_host }}:{{ ollama_port }}/api/tags
+    method: GET
+    status_code: 200
+
+# =============================
+# GET INSTALLED MODELS
+# =============================
+
+- name: Get installed Ollama models
+  command: ollama list
+  environment:
+    OLLAMA_HOST: "{{ ollama_host }}:{{ ollama_port }}"
+  register: installed_models
+  changed_when: false
+
+- name: Normalize installed model names
+  set_fact:
+    installed_model_names: "{{ installed_models.stdout_lines | map('split') | map('first') | list }}"
+
+# =============================
+# PULL MISSING MODELS ONLY
+# =============================
+
+- name: Ensure required Ollama models are installed
+  command: ollama pull {{ item }}
+  environment:
+    OLLAMA_HOST: "{{ ollama_host }}:{{ ollama_port }}"
+  loop: "{{ ollama_models }}"
+  when: item not in installed_model_names
+  register: pull_results
+  changed_when: true
+
+- name: Show pull results
+  debug:
+    var: pull_results.results | default([])
+
+# =============================
+# VERIFY FINAL MODEL LIST
+# =============================
+
+- name: Show final installed models
+  command: ollama list
+  environment:
+    OLLAMA_HOST: "{{ ollama_host }}:{{ ollama_port }}"
+  register: final_models
+  changed_when: false
+
+- name: Display installed models
+  debug:
+    var: final_models.stdout_lines
+
+
+# =============================
+# TEST ONLY PRIMARY MODEL
+# =============================
+
+- name: Run inference test on first model
+  uri:
+    url: "http://{{ ollama_host }}:{{ ollama_port }}/api/generate"
+    method: POST
+    body_format: json
+    body:
+      model: "{{ ollama_models[0] }}"
+      prompt: "Reply exactly: HERMES_READY"
+      stream: false
+    return_content: true
+  register: inference_test
+
+
+# =============================
+# ASSERT CORRECT FUNCTIONING
+# =============================
+- name: Validate inference completed
+  assert:
+    that:
+      - inference_test.json.response is defined
+      - inference_test.json.done == true
+      - inference_test.json.done_reason == "stop"
+    fail_msg: "Ollama inference failed"
+    success_msg: "Ollama model responded successfully"
+
+# =============================
+# DEBUG METRICS
+# =============================
+- name: Show inference stats
+  debug:
+    msg:
+      - "Model: {{ inference_test.json.model }}"
+      - "Response: {{ inference_test.json.response }}"
+      - "Completed: {{ inference_test.json.done }}"
+      - "Reason: {{ inference_test.json.done_reason }}"
+      - "Prompt tokens: {{ inference_test.json.prompt_eval_count | default('n/a') }}"
+      - "Generated tokens: {{ inference_test.json.eval_count | default('n/a') }}"
+
+      - >-
+        Eval duration:
+        {{
+          (inference_test.json.eval_duration / 1000000)
+          | round(2)
+        }} ms
+
+      - >-
+        Total duration:
+        {{
+          (inference_test.json.total_duration / 1000000)
+          | round(2)
+        }} ms

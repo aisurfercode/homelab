@@ -1,0 +1,79 @@
+---
+- name: Check node exists
+  ansible.builtin.command: node --version
+  register: node_version
+  changed_when: false
+
+- name: Check npm exists
+  ansible.builtin.command: npm --version
+  register: npm_version
+  changed_when: false
+
+- name: Ensure NodeJS is installed
+  ansible.builtin.assert:
+    that:
+      - node_version.rc == 0
+      - npm_version.rc == 0
+    fail_msg: >
+      NodeJS/npm must already be installed before running the pi-agent role.
+
+- name: Create npm global directory
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.file:
+    path: "/home/{{ hermes_user }}/.npm-global"
+    state: directory
+    mode: "0755"
+
+- name: Configure npm prefix
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.command:
+    cmd: npm config set prefix /home/{{ hermes_user }}/.npm-global
+  changed_when: false
+
+- name: Ensure npm-global is in PATH
+  become: true
+  ansible.builtin.lineinfile:
+    path: "/home/{{ hermes_user }}/.profile"
+    line: 'export PATH="$HOME/.npm-global/bin:$PATH"'
+    create: true
+
+- name: Create Pi directory
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.file:
+    path: "/home/{{ hermes_user }}/.pi"
+    state: directory
+    mode: "0755"
+
+- name: Check if Pi is already installed
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.stat:
+    path: "/home/{{ hermes_user }}/.npm-global/bin/pi"
+  register: pi_binary
+
+- name: Install Pi Agent
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.command:
+    cmd: >
+      npm install -g --ignore-scripts
+      @earendil-works/pi-coding-agent
+  environment:
+    NPM_CONFIG_PREFIX: "/home/{{ hermes_user }}/.npm-global"
+  when: not pi_binary.stat.exists
+
+- name: Verify Pi installation
+  become: true
+  become_user: "{{ hermes_user }}"
+  ansible.builtin.command:
+    cmd: /home/{{ hermes_user }}/.npm-global/bin/pi --version
+  register: pi_version
+  changed_when: false
+  failed_when: false
+
+- name: Show Pi version
+  ansible.builtin.debug:
+    var: pi_version.stdout

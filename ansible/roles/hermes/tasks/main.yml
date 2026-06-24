@@ -1,0 +1,107 @@
+---
+# =============================
+# 1. BASE DEPENDENCIES
+# =============================
+- name: Ensure base dependencies exist
+  apt:
+    name:
+      - curl
+      - git
+    state: present
+    update_cache: yes
+
+# =============================
+# 2. VERIFY OLLAMA CONNECTIVITY (Radxa)
+# =============================
+- name: Verify Ollama API from Pi
+  uri:
+    url: "http://{{ ollama_host }}:{{ ollama_port }}/api/tags"
+    method: GET
+    status_code: 200
+  register: ollama_check
+  changed_when: false
+
+- name: Show Ollama status
+  debug:
+    var: ollama_check.status
+
+- name: Check if Hermes already installed
+  become_user: "{{ hermes_user }}"
+  stat:
+    path: "{{ hermes_home }}"
+  register: hermes_installed
+
+# =============================
+# 3. DOWNLOAD HERMES INSTALLER (SAFE)
+# =============================
+- name: Download Hermes installer script
+  get_url:
+    url: "{{ hermes_install_script }}"
+    dest: /tmp/hermes-install.sh
+    mode: '0755'
+  when: not hermes_installed.stat.exists
+
+# =============================
+# 4. INSTALL HERMES (NO HANG VERSION)
+# =============================
+- name: Install Hermes Agent (safe async install)
+  become_user: "{{ hermes_user }}"
+  shell: |
+    bash /tmp/hermes-install.sh
+  args:
+    creates: "{{ hermes_home }}"
+  async: 900
+  poll: 10
+  when: not hermes_installed.stat.exists
+
+# =============================
+# 5. VERIFY INSTALL (GATE)
+# =============================
+- name: Find Hermes binary
+  become_user: "{{ hermes_user }}"
+  shell: |
+    find {{ hermes_home }} -type f -name hermes -executable | head -n 1
+  register: hermes_bin
+  changed_when: false
+
+- name: Fail if Hermes binary not found
+  fail:
+    msg: "Hermes installed but binary not found"
+  when: hermes_bin.stdout == ""
+
+# =============================
+# 6. VERIFY VERSION (SAFE CHECK)
+# =============================
+- name: Verify Hermes runtime
+  become_user: "{{ hermes_user }}"
+  shell: "{{ hermes_bin.stdout }} --version"
+  register: hermes_version
+  changed_when: false
+
+- name: Show Hermes version
+  debug:
+    var: hermes_version.stdout
+
+# =============================
+# 7. CONFIGURE MODEL BACKEND (ONLY AFTER INSTALL)
+# =============================
+- name: Configure Hermes model provider
+  become_user: "{{ hermes_user }}"
+  shell: |
+    hermes config set model.provider {{ hermes_model_provider }}
+    hermes config set model.base_url http://{{ ollama_host }}:{{ ollama_port }}
+  when: not hermes_installed.stat.exists
+
+# =============================
+# 8. FINAL HEALTH CHECK
+# =============================
+- name: Run Hermes help check
+  become_user: "{{ hermes_user }}"
+  shell: "{{ hermes_bin.stdout }}  --help"
+  register: hermes_help
+  changed_when: false
+
+- name: Confirm Hermes is working
+  debug:
+    msg: "Hermes installed and responding correctly"
+  when: hermes_help.rc == 0
