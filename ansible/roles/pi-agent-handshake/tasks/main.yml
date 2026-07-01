@@ -7,34 +7,32 @@
     state: directory
     mode: "0755"
 
-- name: Configure Pi to use Ollama
+- name: Assemble models-list JSON content
+set_fact:
+models_json_content: |
+  {
+    "providers": {
+      "ollama": {
+        "baseUrl": "http://{{ ollama_host }}:{{ ollama_port }}/v1",
+        "api": "openai-completions",
+        "apiKey": "ollama",
+        "compat": {
+          "supportsDeveloperRole": false,
+          "supportsReasoningEffort": false
+        },
+        "models": {{ ollama_model_list | to_json }}
+      }
+    }
+  }
+
+- name: Write Pi Agent models configuration
   become: true
   ansible.builtin.copy:
     dest: "/home/{{ hermes_user }}/.pi/agent/models.json"
     owner: "{{ hermes_user }}"
     group: "{{ hermes_user }}"
     mode: "0644"
-    content: |
-      {
-        "providers": {
-          "ollama": {
-            "baseUrl": "http://{{ ollama_host }}:{{ ollama_port }}/v1",
-            "api": "openai-completions",
-            "apiKey": "ollama",
-            "compat": {
-              "supportsDeveloperRole": false,
-              "supportsReasoningEffort": false
-            },
-            "models": [
-              {
-                "id": "{{ hermes_model_name }}",
-                "contextWindow": {{ hermes_context_length }},
-                "reasoning": true
-              }
-            ]
-          }
-        }
-      }
+    content: "{{ models_json_content }}"
 
 - name: Ensure Pi permission system config directory exists
   file:

@@ -12,7 +12,22 @@ hermes_user: homelab
 hermes_home: "/home/homelab/.hermes"
 
 ollama_models:
-  - ibm/granite4:tiny-h  
+  - ornith:16k-9b
+  - qwen3.5:32k-9b
 
-hermes_model_name: ibm/granite4:tiny-h
+hermes_model_name:
+  - ornith:16k-9b
+  - qwen3.5:32k-9b
+
 hermes_context_length: 65536
+
+ollama_model_list:
+  - id: "ornith:16k-9b"
+    contextWindow: 16384
+    reasoning: true
+  - id: "qwn3.5:32k-9b"
+    contextWindow: 32768
+    reasoning: true
+  - id: "granite4.1:16k-8b"
+    contextWindow: 16384
+    reasoning: false
