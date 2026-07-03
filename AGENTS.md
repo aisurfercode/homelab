@@ -1,6 +1,16 @@
 ## Summary of the Repo
-
 This repo is used to establish a homelab using ansible automation
+
+## Folder structure
+.
+├── AGENTS.md           - contains information for coding agents this file itself
+├── ansible             - ansible code lives inside ansible directory
+│   ├── ansible.cfg     - ansible configuration
+│   ├── docs            - documentation directory
+│   ├── inventory       - host inventory, variables and group variables
+│   ├── playbooks       - plays organized into invoking roles
+│   └── roles           - tasks related to each role as referenced in playbook
+└── README.md           - Brief introduction of the project, not complete
 
 ## CAUTION
 The README.md may cover only partial coverage of all features
