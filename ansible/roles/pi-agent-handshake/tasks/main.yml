@@ -7,25 +7,24 @@
     state: directory
     mode: "0755"
 
-- name: Assemble models-list JSON content
-set_fact:
-models_json_content: |
-  {
-    "providers": {
-      "ollama": {
-        "baseUrl": "http://{{ ollama_host }}:{{ ollama_port }}/v1",
-        "api": "openai-completions",
-        "apiKey": "ollama",
-        "compat": {
-          "supportsDeveloperRole": false,
-          "supportsReasoningEffort": false
-        },
-        "models": {{ ollama_model_list | to_json }}
-      }
-    }
-  }
+- name: Build the configuration dictionary
+  set_fact:
+    models_config:
+      providers:
+        ollama:
+          baseUrl: "http://{{ ollama_host }}:{{ ollama_port }}/v1"
+          api: "openai-completions"
+          apiKey: "ollama"
+          compat:
+            supportsDeveloperRole: false
+            supportsReasoningEffort: false
+          models: "{{ ollama_model_list }}"
 
-- name: Write Pi Agent models configuration
+- name: Convert dictionary to JSON string
+  set_fact:
+    models_json_content: "{{ models_config | to_nice_json(indent=2) }}"
+
+- name: Write pi agent models.json configuration
   become: true
   ansible.builtin.copy:
     dest: "/home/{{ hermes_user }}/.pi/agent/models.json"

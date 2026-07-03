@@ -25,7 +25,7 @@ ollama_model_list:
   - id: "ornith:16k-9b"
     contextWindow: 16384
     reasoning: true
-  - id: "qwn3.5:32k-9b"
+  - id: "qwen3.5:32k-9b"
     contextWindow: 32768
     reasoning: true
   - id: "granite4.1:16k-8b"
